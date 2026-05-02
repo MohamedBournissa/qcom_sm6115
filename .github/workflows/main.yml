@@ -1,4 +1,4 @@
-name: Build NetHunter Kernel
+name: lime_defconfig
 on:
   workflow_dispatch:
 
