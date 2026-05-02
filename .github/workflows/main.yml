@@ -11,7 +11,7 @@ jobs:
         with:
           ref: patch-1
 
-      - name: Build
+      - name: Build Kernel
         run: |
           make vendor/lime_defconfig
           make -j$(nproc --all)
