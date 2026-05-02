@@ -27,4 +27,4 @@ jobs:
         uses: actions/upload-artifact@v4 # تم التحديث إلى v4 لحل المشكلة الظاهرة في الصورة
         with:
           name: Kernel_Redmi9T
-          path: out/arch/arm64/boot/Image.gz-dtb
+          path: out/arch/arm64/boot/Image*
