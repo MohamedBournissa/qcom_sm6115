@@ -1,0 +1,17 @@
+name: Build NetHunter Kernel
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v3
+        with:
+          ref: patch-1
+
+      - name: Build
+        run: |
+          make vendor/lime_defconfig
+          make -j$(nproc --all)
