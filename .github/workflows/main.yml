@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # تحديث للإصدار 4
         with:
           ref: patch-1
 
@@ -20,12 +20,11 @@ jobs:
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          # استخدام الملف الصحيح الذي وجدناه في القائمة
           make O=out vendor/bengal_defconfig
           make O=out -j$(nproc --all)
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # تم التحديث إلى v4 لحل المشكلة الظاهرة في الصورة
         with:
           name: Kernel_Redmi9T
           path: out/arch/arm64/boot/Image.gz-dtb
