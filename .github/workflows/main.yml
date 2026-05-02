@@ -1,30 +1,78 @@
+
 name: Build NetHunter Kernel
+
 on:
   workflow_dispatch:
+  push:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4 # تحديث للإصدار 4
-        with:
-          ref: patch-1
+    - name: Checkout Source
+      uses: actions/checkout@v4
+      with:
+        ref: patch-1
 
-      - name: Install Build Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev flex bison libelf-dev gcc-aarch64-linux-gnu
+    - name: Setup Build Environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libelf-dev
 
-      - name: Build Kernel
-        run: |
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          make O=out vendor/bengal_defconfig
-          make O=out -j$(nproc --all)
+    - name: Clone Proton Clang Toolchain
+      run: |
+        git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4 # تم التحديث إلى v4 لحل المشكلة الظاهرة في الصورة
-        with:
-          name: Kernel_Redmi9T
-          path: out/arch/arm64/boot/Image*
+    - name: Clone AnyKernel3
+      run: |
+        git clone --depth=1 https://github.com/osm0sis/AnyKernel3
+
+    - name: Build Kernel
+      run: |
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export CLANG_PATH=$PWD/clang/bin
+        export PATH=$CLANG_PATH:$PATH
+        
+        # استخدم lime_defconfig للـ Redmi 9T
+        make O=out ARCH=arm64 lime_defconfig
+        
+        # تأكد من تفعيل touchscreen
+        cat >> out/.config << EOF
+        CONFIG_TOUCHSCREEN_FTS=y
+        CONFIG_TOUCHSCREEN_FOCALTECH_FTS=y
+        CONFIG_TOUCHSCREEN_MTK_TOUCH=y
+        CONFIG_INPUT_TOUCHSCREEN=y
+        EOF
+        
+        # ابني الكيرنل بـ Clang
+        make -j$(nproc) O=out \
+          ARCH=arm64 \
+          CC=clang \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+
+    - name: Prepare AnyKernel3
+      run: |
+        cd AnyKernel3
+        rm -rf .git* modules patch ramdisk
+        
+        # إنشاء anykernel.sh
+        cat > anykernel.sh << 'EOF'
+        # AnyKernel3 Ramdisk Mod Script
+        properties() { '
+        kernel.string=NetHunter Kernel for Redmi 9T
+        do.devicecheck=1
+        do.modules=0
+        do.systemless=1
+        do.cleanup=1
+        do.cleanuponabort=0
+        device.name1=lime
+        device.name2=lemon
+        device.name3=citrus
+        supported.versions=11-13
+        '; }
+        
+        block=/dev/block/bootdevice/
