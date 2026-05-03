@@ -11,18 +11,12 @@ jobs:
     steps:
     - name: Maximize Space
       run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
         sudo apt-get clean
 
     - name: Checkout Kernel Source
-      uses: actions/checkout@v4
-      with:
-        repository: 'AgentFabulous/kernel_xiaomi_mt6768'
-        ref: 'lineage-18.1'
-        path: 'kernel'
-        fetch-depth: 1
+      run: |
+        git clone --depth=1 https://github.com/xiaomi-mt6768-dev/android_kernel_xiaomi_mt6768.git -b lineage-20 kernel
 
     - name: Setup Build Environment
       run: |
@@ -50,41 +44,34 @@ jobs:
         export SUBARCH=arm64
         export CLANG_PATH="${GITHUB_WORKSPACE}/clang/bin"
         export PATH="${CLANG_PATH}:${PATH}"
+        export KBUILD_BUILD_USER="NetHunter"
+        export KBUILD_BUILD_HOST="GitHub-Actions"
         
-        # Make defconfig
+        # Use correct defconfig
         make O=out ARCH=arm64 lime_defconfig
         
-        # Add NetHunter options
-        cat >> out/.config << 'KCONFIG'
-        # Touchscreen
+        # Add NetHunter support
+        cat >> out/.config << 'EOF'
         CONFIG_TOUCHSCREEN_FTS=y
         CONFIG_TOUCHSCREEN_FOCALTECH_FTS=y
         CONFIG_TOUCHSCREEN_MTK_TOUCH=y
         CONFIG_INPUT_TOUCHSCREEN=y
-        
-        # WiFi & NetHunter
         CONFIG_CFG80211=y
         CONFIG_MAC80211=y
         CONFIG_WIRELESS_EXT=y
         CONFIG_WEXT_PRIV=y
         CONFIG_WEXT_CORE=y
         CONFIG_WEXT_PROC=y
-        
-        # USB WiFi Adapters
         CONFIG_RTL8188EU=m
         CONFIG_88EU_AP_MODE=y
-        
-        # HID Gadget (Keyboard Attack)
         CONFIG_USB_GADGET=y
         CONFIG_USB_CONFIGFS=y
         CONFIG_USB_CONFIGFS_F_HID=y
-        
-        # Networking
         CONFIG_TUN=y
         CONFIG_PACKET=y
         CONFIG_NETFILTER=y
         CONFIG_NL80211_TESTMODE=y
-        KCONFIG
+        EOF
         
         make O=out ARCH=arm64 olddefconfig
         
@@ -96,16 +83,15 @@ jobs:
           CROSS_COMPILE=aarch64-linux-gnu- \
           CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
-    - name: Create Flashable ZIP
+    - name: Prepare AnyKernel3
       run: |
         cd AnyKernel3
         rm -rf .git* modules patch ramdisk
         
-        # Create anykernel.sh
-        cat > anykernel.sh << 'AKSH'
-        # AnyKernel3 Script
+        cat > anykernel.sh << 'AKSCRIPT'
+        # AnyKernel3 Ramdisk Mod Script
         properties() { '
-        kernel.string=NetHunter Kernel for Redmi 9T
+        kernel.string=NetHunter Kernel - Redmi 9T (lime)
         do.devicecheck=1
         do.modules=1
         do.systemless=1
@@ -124,18 +110,15 @@ jobs:
         . tools/ak3-core.sh;
         dump_boot;
         write_boot;
-        AKSH
+        AKSCRIPT
         
-        # Copy kernel
         cp ${GITHUB_WORKSPACE}/kernel/out/arch/arm64/boot/Image.gz-dtb .
         
-        # Copy modules if any
         mkdir -p modules/system/lib/modules
         find ${GITHUB_WORKSPACE}/kernel/out -name '*.ko' \
           -exec cp {} modules/system/lib/modules/ \; 2>/dev/null || true
         
-        # Create ZIP
-        zip -r9 ../NetHunter-Kernel-Lime-$(date +%Y%m%d-%H%M).zip * \
+        zip -r9 ../NetHunter-Kernel-$(date +%Y%m%d-%H%M).zip * \
           -x '*.git*' README.md
 
     - name: Upload Kernel
@@ -143,9 +126,3 @@ jobs:
       with:
         name: NetHunter-Kernel-Redmi9T
         path: NetHunter-Kernel-*.zip
-        
-    - name: Upload Image Only
-      uses: actions/upload-artifact@v4
-      with:
-        name: Image.gz-dtb
-        path: kernel/out/arch/arm64/boot/Image.gz-dtb
