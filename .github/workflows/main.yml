@@ -1,1 +1,221 @@
+name: Build Kernel - Redmi 9T (NetHunter + KernelSU)
 
+on:
+  workflow_dispatch:
+  push:
+    branches: [ thirteen ]
+
+env:
+  # مصدر واحد لكل مسارات الأدوات - عدّل هنا بس لو غيرت النسخة
+  CLANG_DIR: ${{ github.workspace }}/clang
+  GCC64_DIR: ${{ github.workspace }}/gcc-aarch64
+  GCC32_DIR: ${{ github.workspace }}/gcc-arm
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  DEFCONFIG: vendor/chime-stock_defconfig
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120  # يمنع الـ job من التعليق لحد 6 ساعات لو حصل هانج
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: thirteen
+          fetch-depth: 1
+
+      - name: Free Disk Space
+        run: |
+          echo "=> Freeing disk space..."
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
+            /usr/local/lib/android /opt/hostedtoolcache /usr/share/swift
+          sudo docker image prune -af 2>/dev/null || true
+          sudo apt-get clean
+          df -h
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential ccache curl flex \
+            g++-multilib gcc-multilib git gnupg gperf \
+            lib32ncurses5-dev lib32readline-dev lib32z1-dev \
+            liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev \
+            libssl-dev libxml2 libxml2-utils lzop pngcrush \
+            rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
+            python3 python-is-python3
+          # ملحوظة: اتشال سطر ln -sf python2 -> python
+          # لأن أنظمة بناء الكيرنل (Kconfig/Kbuild) بتحتاج بايثون 3،
+          # و python-is-python3 أصلاً بيعمل الـ symlink الصح
+          python --version
+
+      - name: Cache ccache directory
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-redmi9t-${{ github.sha }}
+          restore-keys: |
+            ccache-redmi9t-
+
+      - name: Download Clang (ZyCromerZ)
+        run: |
+          echo "=> Downloading ZyCromerZ Clang..."
+          mkdir -p "${CLANG_DIR}"
+          wget -q https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20230208-release/Clang-15.0.7-20230208.tar.gz -O clang.tar.gz
+          tar -xzf clang.tar.gz -C "${CLANG_DIR}"
+          rm clang.tar.gz
+
+      - name: Download GCC Toolchains
+        run: |
+          echo "=> Downloading GCC Toolchains..."
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 "${GCC64_DIR}"
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 "${GCC32_DIR}"
+
+      - name: Setup KernelSU
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "=> Integrating KernelSU..."
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+
+      - name: Setup Build Environment & Config
+        run: |
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export PATH="${CLANG_DIR}/bin:${PATH}"
+          export USE_CCACHE=1
+          export CCACHE_DIR="${CCACHE_DIR}"
+          ccache -M 5G
+
+          echo "=> Applying default config..."
+          make O=out ARCH=arm64 CC="ccache clang" \
+            CROSS_COMPILE="${GCC64_DIR}/bin/aarch64-linux-android-" \
+            CROSS_COMPILE_ARM32="${GCC32_DIR}/bin/arm-linux-androideabi-" \
+            "${DEFCONFIG}"
+
+          echo "=> Injecting NetHunter Configs..."
+          cat << 'EOF' >> out/.config
+          CONFIG_MAC80211=y
+          CONFIG_CFG80211_WEXT=y
+          CONFIG_MAC80211_MESH=y
+          CONFIG_USB_CONFIGFS_RNDIS=y
+          CONFIG_USB_CONFIGFS_ECM=y
+          CONFIG_USB_CONFIGFS_ECM_SUBSET=y
+          CONFIG_USB_CONFIGFS_EEM=y
+          CONFIG_HIDRAW=y
+          CONFIG_NETFILTER=y
+          CONFIG_NETFILTER_ADVANCED=y
+          CONFIG_IP_NF_IPTABLES=y
+          CONFIG_IP_NF_FILTER=y
+          CONFIG_IP_NF_NAT=y
+          CONFIG_IP_NF_TARGET_MASQUERADE=y
+          CONFIG_NF_NAT=y
+          CONFIG_BT_HIDP=y
+          CONFIG_PACKET_DIAG=y
+          CONFIG_ATH9K_HTC=y
+          EOF
+
+          echo "=> Enabling KernelSU config..."
+          # ده كان ناقص في الأصل - setup.sh بتاع KernelSU
+          # بينسخ الكود بس مش بيفعّل الـ config symbol
+          cat << 'EOF' >> out/.config
+          CONFIG_KSU=y
+          EOF
+
+          echo "=> Resolving config conflicts..."
+          make O=out ARCH=arm64 CC="ccache clang" \
+            CROSS_COMPILE="${GCC64_DIR}/bin/aarch64-linux-android-" \
+            CROSS_COMPILE_ARM32="${GCC32_DIR}/bin/arm-linux-androideabi-" \
+            olddefconfig
+
+          echo "=> التحقق من إن الإعدادات المهمة اتفعلت فعلاً بعد olddefconfig"
+          for cfg in CONFIG_KSU CONFIG_NETFILTER CONFIG_ATH9K_HTC; do
+            if ! grep -q "^${cfg}=y" out/.config; then
+              echo "⚠️  تحذير: ${cfg} مش مفعّل بعد olddefconfig - يمكن يكون معتمد على حاجة الـ defconfig الأصلي مقفلها"
+            fi
+          done
+
+      - name: Build Kernel
+        run: |
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export PATH="${CLANG_DIR}/bin:${PATH}"
+          export USE_CCACHE=1
+          export CCACHE_DIR="${CCACHE_DIR}"
+
+          echo "=> Starting kernel build..."
+          make -j$(nproc) O=out ARCH=arm64 \
+            CC="ccache clang" \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE="${GCC64_DIR}/bin/aarch64-linux-android-" \
+            CROSS_COMPILE_ARM32="${GCC32_DIR}/bin/arm-linux-androideabi-" \
+            2>&1 | tee build.log
+
+          ccache -s  # عرض إحصائيات الكاش في اللوج
+
+      - name: Package Flashable ZIP
+        run: |
+          echo "=> Checking Output and Packaging..."
+
+          if [ -f out/arch/arm64/boot/Image.gz-dtb ]; then
+            KERNEL_IMG="out/arch/arm64/boot/Image.gz-dtb"
+          elif [ -f out/arch/arm64/boot/Image.gz ]; then
+            KERNEL_IMG="out/arch/arm64/boot/Image.gz"
+          elif [ -f out/arch/arm64/boot/Image ]; then
+            KERNEL_IMG="out/arch/arm64/boot/Image"
+          else
+            echo "❌ BUILD FAILED: No Image found!"
+            tail -n 100 build.log
+            exit 1
+          fi
+
+          echo "✅ KERNEL FOUND: $KERNEL_IMG"
+
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3
+          cd AnyKernel3
+          rm -rf .git* modules patch ramdisk
+
+          cat > anykernel.sh << 'EOF'
+          properties() {
+          kernel.string=NetHunter-KernelSU by MohamedBournissa
+          do.devicecheck=1
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=lime
+          device.name2=lemon
+          device.name3=citrus
+          device.name4=pomelo
+          device.name5=chime
+          supported.versions=11-14
+          }
+          block=/dev/block/bootdevice/by-name/boot;
+          is_slot_device=0;
+          ramdisk_compression=auto;
+          patch_vbmeta_flag=auto;
+          . tools/ak3-core.sh;
+          dump_boot;
+          write_boot;
+          EOF
+
+          cp "../$KERNEL_IMG" .
+
+          ZIPNAME="NetHunter-KernelSU-Redmi9T.zip"
+          # تصحيح استثناءات zip: كل نمط لازم -x منفصل بتاعه
+          zip -r9 "../$ZIPNAME" * -x ".git*" -x "README.md" -x "*placeholder*"
+
+      - name: Upload Kernel ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetHunter-KernelSU-Redmi9T
+          path: "*.zip"
+          if-no-files-found: error
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
