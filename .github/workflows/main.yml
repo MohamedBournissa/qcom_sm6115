@@ -55,20 +55,20 @@ jobs:
           
           cd $GITHUB_WORKSPACE
           
+          echo "=> عرض جميع ملفات الإعدادات الموجودة في المستودع (للتشخيص):"
+          ls -R arch/arm64/configs/ || echo "المجلد غير موجود!"
+          
           echo "=> البحث عن ملف الإعدادات (defconfig)..."
           
-          # إعطاء الأولوية القصوى لاسم juice بناءً على اقتراحك
           DEFCONFIG=$(find arch/arm64/configs -type f -name "*defconfig" | grep -iE "juice" | grep -v "debug" | head -n 1 | sed 's|arch/arm64/configs/||')
           
-          # إذا لم يجد juice، سيبحث عن الأسماء البديلة
           if [ -z "$DEFCONFIG" ]; then
-            DEFCONFIG=$(find arch/arm64/configs -type f -name "*defconfig" | grep -iE "chime|citrus|lime" | grep -v "debug" | head -n 1 | sed 's|arch/arm64/configs/||')
+            DEFCONFIG=$(find arch/arm64/configs -type f -name "*defconfig" | grep -iE "chime|citrus|lime|bengal" | grep -v "debug" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
           
-          # الخيار الافتراضي الأخير
           if [ -z "$DEFCONFIG" ]; then
-            echo "⚠️ لم يتم العثور على الملف بالبحث، سيتم استخدام الافتراضي..."
-            DEFCONFIG="vendor/juice_defconfig"
+            echo "⚠️ لم يتم العثور على الملف بالبحث التلقائي، سيتم استخدام الافتراضي..."
+            DEFCONFIG="juice_defconfig"
           fi
           
           echo "✅ تم اختيار ملف الإعدادات: $DEFCONFIG"
