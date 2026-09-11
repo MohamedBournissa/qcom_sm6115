@@ -53,8 +53,8 @@ jobs:
           export KBUILD_BUILD_USER="MohamedBournissa"
           export KBUILD_BUILD_HOST="GitHub_Actions"
           
-          # إعداد ملف الـ defconfig 
-          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/citrus-perf_defconfig
+          # تم تغيير اسم ملف الإعدادات هنا إلى chime-perf_defconfig
+          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/chime-perf_defconfig
           
           # بدء البناء الفعلي للنواة
           make -j$(nproc --all) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- | tee out/build.log
