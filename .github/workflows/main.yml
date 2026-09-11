@@ -38,8 +38,9 @@ jobs:
 
       - name: Setup KernelSU
         run: |
+          # استخدام الإصدار المتوافق وتثبيته بشكل صحيح لتفادي أخطاء الدوال البرمجية
           curl -lsO "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
-          bash setup.sh
+          bash setup.sh v10850
 
       - name: Setup Build Environment & Config
         run: |
@@ -64,8 +65,7 @@ jobs:
           fi
           
           if [ -z "$DEFCONFIG" ]; then
-            echo "⚠️ لم يتم العثور على الملف بالبحث التلقائي، سيتم استخدام الافتراضي..."
-            DEFCONFIG="vendor/juice_defconfig"
+            DEFCONFIG="juice_defconfig"
           fi
           
           echo "✅ تم اختيار ملف الإعدادات: $DEFCONFIG"
@@ -73,19 +73,16 @@ jobs:
           make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- $DEFCONFIG
           
           echo "=> بدء بناء النواة..."
-          # أزلنا أداة حفظ السجل لتظهر الأخطاء الحقيقية وتوقف العملية فوراً إن وجدت
           make -j$(nproc --all) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
       - name: Package Flashable ZIP
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          # نسخ ذكي لملفات النواة
           find out/arch/arm64/boot -type f -name "Image*" -exec cp {} AnyKernel3/ \;
           cd AnyKernel3
           
-          # التحقق من نجاح النسخ
           if [ ! -f Image ] && [ ! -f Image.gz ] && [ ! -f Image.gz-dtb ]; then
-            echo "❌ لم يتم العثور على ملف النواة المجمعة! البناء فشل في الخطوة السابقة."
+            echo "❌ لم يتم العثور على ملف النواة المجمعة!"
             exit 1
           fi
           
