@@ -53,10 +53,29 @@ jobs:
           export KBUILD_BUILD_USER="MohamedBournissa"
           export KBUILD_BUILD_HOST="GitHub_Actions"
           
-          # تم تغيير اسم ملف الإعدادات هنا إلى chime-perf_defconfig
-          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/chime-perf_defconfig
+          cd $GITHUB_WORKSPACE
           
-          # بدء البناء الفعلي للنواة
+          echo "=> البحث عن ملف الإعدادات (defconfig)..."
+          
+          # إعطاء الأولوية القصوى لاسم juice بناءً على اقتراحك
+          DEFCONFIG=$(find arch/arm64/configs -type f -name "*defconfig" | grep -iE "juice" | grep -v "debug" | head -n 1 | sed 's|arch/arm64/configs/||')
+          
+          # إذا لم يجد juice، سيبحث عن الأسماء البديلة
+          if [ -z "$DEFCONFIG" ]; then
+            DEFCONFIG=$(find arch/arm64/configs -type f -name "*defconfig" | grep -iE "chime|citrus|lime" | grep -v "debug" | head -n 1 | sed 's|arch/arm64/configs/||')
+          fi
+          
+          # الخيار الافتراضي الأخير
+          if [ -z "$DEFCONFIG" ]; then
+            echo "⚠️ لم يتم العثور على الملف بالبحث، سيتم استخدام الافتراضي..."
+            DEFCONFIG="vendor/juice_defconfig"
+          fi
+          
+          echo "✅ تم اختيار ملف الإعدادات: $DEFCONFIG"
+          
+          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- $DEFCONFIG
+          
+          echo "=> بدء بناء النواة..."
           make -j$(nproc --all) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- | tee out/build.log
 
       - name: Package Flashable ZIP
