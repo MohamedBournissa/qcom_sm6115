@@ -3,7 +3,7 @@ name: بناء نواة النظام - ريدمي 9 تي (نت هانتر + كي
 on:
   workflow_dispatch:
   push:
-    branches: [ main ] # تم التعديل هنا إلى main
+    branches: [ zeta ] # تم التعديل هنا إلى main
 
 jobs:
   build:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          ref: main # وتم التعديل هنا إلى main
+          ref: zeta # وتم التعديل هنا إلى zeta
           fetch-depth: 1
 
       - name: Free Disk Space
