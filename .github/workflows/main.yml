@@ -55,9 +55,6 @@ jobs:
           
           cd $GITHUB_WORKSPACE
           
-          echo "=> عرض جميع ملفات الإعدادات الموجودة في المستودع (للتشخيص):"
-          ls -R arch/arm64/configs/ || echo "المجلد غير موجود!"
-          
           echo "=> البحث عن ملف الإعدادات (defconfig)..."
           
           DEFCONFIG=$(find arch/arm64/configs -type f -name "*defconfig" | grep -iE "juice" | grep -v "debug" | head -n 1 | sed 's|arch/arm64/configs/||')
@@ -68,7 +65,7 @@ jobs:
           
           if [ -z "$DEFCONFIG" ]; then
             echo "⚠️ لم يتم العثور على الملف بالبحث التلقائي، سيتم استخدام الافتراضي..."
-            DEFCONFIG="juice_defconfig"
+            DEFCONFIG="vendor/juice_defconfig"
           fi
           
           echo "✅ تم اختيار ملف الإعدادات: $DEFCONFIG"
@@ -76,13 +73,22 @@ jobs:
           make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- $DEFCONFIG
           
           echo "=> بدء بناء النواة..."
-          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- | tee out/build.log
+          # أزلنا أداة حفظ السجل لتظهر الأخطاء الحقيقية وتوقف العملية فوراً إن وجدت
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
       - name: Package Flashable ZIP
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/ || cp out/arch/arm64/boot/Image AnyKernel3/ || cp out/arch/arm64/boot/Image.gz AnyKernel3/
+          # نسخ ذكي لملفات النواة
+          find out/arch/arm64/boot -type f -name "Image*" -exec cp {} AnyKernel3/ \;
           cd AnyKernel3
+          
+          # التحقق من نجاح النسخ
+          if [ ! -f Image ] && [ ! -f Image.gz ] && [ ! -f Image.gz-dtb ]; then
+            echo "❌ لم يتم العثور على ملف النواة المجمعة! البناء فشل في الخطوة السابقة."
+            exit 1
+          fi
+          
           zip -r9 ../Kernel-Redmi9T.zip * -x .git README.md *placeholder
 
       - name: Upload Kernel ZIP
@@ -90,10 +96,3 @@ jobs:
         with:
           name: Kernel-Redmi9T-NetHunter-KSU
           path: Kernel-Redmi9T.zip
-
-      - name: Upload Build Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: out/build.log
