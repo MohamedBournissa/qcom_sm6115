@@ -38,9 +38,11 @@ jobs:
 
       - name: Setup KernelSU
         run: |
-          # استخدام الإصدار المتوافق وتثبيته بشكل صحيح لتفادي أخطاء الدوال البرمجية
           curl -lsO "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
-          bash setup.sh v10850
+          bash setup.sh v0.9.5
+          
+          # إصلاح عدم توافق MODULE_IMPORT_NS مع نواة 4.19
+          find drivers/kernelsu -type f -name "*.c" -exec sed -i '1i #ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif' {} +
 
       - name: Setup Build Environment & Config
         run: |
